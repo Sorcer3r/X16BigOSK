@@ -1,0 +1,21 @@
+{
+    "folders": [
+		{
+			"path": "."
+		}
+    ],
+	"settings": {
+        "files.autoSave": "afterDelay",
+        "editor.acceptSuggestionOnEnter": "off",
+        "editor.fontSize": 24,
+        "files.associations": {
+            "*.asm": "kickassembler"
+		},
+		"kickassembler.emulator.runtime": "C:/Users/derek/DeveloperTools/CommanderX16/x16emu.exe",
+        "kickassembler.assembler.option.outputDirectory": "Bin",
+        "kickassembler.emulator.options": "-prg ${kickassembler:buildFilename} -run -scale 2 -debug -keymap en-gb -joy1",
+        "kickassembler.assembler.jar": "C:/Users/derek/DeveloperTools/KickAssembler/KickAss.jar",
+        "kickassembler.assembler.option.cfgfile": "C:/Users/derek/DeveloperTools/KickAssembler/KickAss.cfg"
+
+    }
+}

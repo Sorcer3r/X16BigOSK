@@ -24,6 +24,9 @@ char1Colour:     .byte 0
 char2Colour:     .byte 0
 char3Colour:     .byte 0
 
+scrollXIndex: .byte 0
+scrollYIndex: .byte 0
+
 *=$0801
 	BasicUpstart2(bigOSK)
 
@@ -93,13 +96,26 @@ characterDataLoop:
     lda #$06
     sta char3Colour
 
+    stz scrollXIndex    // start sine wave pointer at 0 for X
+    lda #$40
+    sta scrollYIndex    // and start at 64 (90 degrees out of phase) for Y 
+                        // this is the same as calculating for cosine but
+                        // no need for a second table
+
 colourCycle:
-    wai
-    wai
     wai         // wait a while
+    ldx scrollXIndex        // get index into sine table for X
+    lda waveTable,x         // get value from table using index
+    sta VERA_L1_hscrollLow  // put it in H scroll reg
+    ldx scrollYIndex        // get index into sine table for Y
+    lda waveTable,x         // get value from table using index
+    sta VERA_L1_vscrollLow  // put it into Y scroll reg
+    dec scrollXIndex        // dec index pointer for X
+    dec scrollYIndex        // same for Y
+                            // change these to INC for anticlockwise rotation
     lda #$02
-    sta VERAAddrLow     // pint to color 1 in palette
-    tay                 // and put 2 in Y while we have it :)
+    sta VERAAddrLow     // point to color 1 in palette
+    tay                 // and put the #2 in Y while we have it :)
 colourLoop:
     ldx char1Colour,y   // get character colour pointer
     lda colourTableGB,x // get GB colour
@@ -108,13 +124,17 @@ colourLoop:
     sta VERADATA0
     dey                 // do it for all 3 characters
     bpl colourLoop
+                        // lets only update the colours every 4 cycles
+    lda scrollXIndex    // use scrollXindex since it increments every cycle
+    and #$03            // mask off lower 2 bits
+    bne colourCycle     // if they aren't 0 then do skip updating colours
     ldx #$02
 updateColours:
     lda char1Colour,x   // increment each of the colour table pointers
     inc
     and #$1f            // but keep them in range 0-31
     sta char1Colour,x
-    dex
+    dex                 // repeat for each of the 3 colours we cycle
     bpl updateColours    
     bra colourCycle     // do it all again, forever!
 
@@ -123,13 +143,13 @@ DrawMessage:{
     lda characterPositionsY,x  // get row to start drawing character at
     clc
     adc #$B0                    // calculate vera high byte
-    sta VERAAddrHigh
+    sta VERAAddrHigh            // this is our ROW
     lda characterPositionsX,x   // get column to draw character at
     asl                         // double it because 2 bytes per character position (Character,Colour)
-    sta VERAAddrLow
-    lda colourList,x
+    sta VERAAddrLow             // this is our COL
+    lda colourList,x            // get the colour we need to draw in
     sta CharacterColour
-    jsr drawCharacter
+    jsr drawCharacter           // go draw the character
     inc messagePosition         // move to next position in table
     inc messagepointer          // move to next character
     lda messagepointer          
@@ -149,10 +169,10 @@ drawCharacter:{
     ldx #$08                // row counter
 Row:
     lda (characterDataPointer)  // get data for this row of the character
-    ldy #$08                // there are 8 bits
+    ldy #$08                // there are 8 bits per row of the character
 Line:
     asl                     // move bit 7 into carry
-    sta currentCharacter    // save it for next time round
+    sta currentCharacter    // save shifted byte for next time round
     bcs drawBlock           // if carry then we need to draw a character
     lda VERADATA0
     lda VERADATA0           // otherwise skip 2 bytes since bit is not set
@@ -163,12 +183,12 @@ drawBlock:
     lda CharacterColour     // get colour for this character
 	sta VERADATA0
 nextBlock:
-    lda currentCharacter    //get currentcharacter data back
+    lda currentCharacter    //get the shifted data back
     dey
 	bne Line                // repeat for all 8 bits of the row
     lda VERAAddrLow
     sec
-    sbc #16                 // move X back 8 characters
+    sbc #16                 // move X back 8 characters (16 bytes, 2 per character)
     sta VERAAddrLow
     inc VERAAddrHigh        // move Y down 1 row
     inc characterDataPointer
@@ -229,10 +249,13 @@ calculateCharAddressInRom:{
 .encoding "screencode_upper"
 message:
     .text "OSK"
+
 characterPositionsX:    // Col
-    .byte 8,16,24,0,9,17,25,0
+    .byte 15,23,31,0,16,24,32,0
+
 characterPositionsY:    // Row
-    .byte 11,11,11,0,12,12,12,0
+    .byte 19,19,19,0,20,20,20,0
+
 colourList:             // colours to use for characters
     .byte $61,$62,$63,$00,$60,$60,$60,$60
 
@@ -248,5 +271,25 @@ colourTableR:
 .byte $07, $08, $09, $0A, $0B, $0C, $0D, $0E
 .byte $0F, $0F, $0F, $0F, $0F, $0E, $0D, $0C
 .byte $0B, $0A, $09, $08, $07, $06, $05, $04
+
+// table of 256 sine wave values used for the circle movement
+// to get cosine values we offset by 64 (90 degrees)
+waveTable:
+    .byte $3E,$3F,$41,$42,$44,$45,$47,$48,$4A,$4B,$4D,$4E,$4F,$51,$52,$54
+    .byte $55,$57,$58,$59,$5B,$5C,$5D,$5F,$60,$61,$62,$64,$65,$66,$67,$68
+    .byte $69,$6A,$6B,$6C,$6D,$6E,$6F,$70,$71,$72,$73,$73,$74,$75,$76,$76
+    .byte $77,$77,$78,$78,$79,$79,$7A,$7A,$7A,$7B,$7B,$7B,$7B,$7B,$7B,$7B
+    .byte $7B,$7B,$7B,$7B,$7B,$7B,$7B,$7B,$7A,$7A,$7A,$79,$79,$78,$78,$77
+    .byte $77,$76,$76,$75,$74,$73,$73,$72,$71,$70,$6F,$6E,$6D,$6C,$6B,$6A
+    .byte $69,$68,$67,$66,$65,$64,$62,$61,$60,$5F,$5D,$5C,$5B,$59,$58,$57
+    .byte $55,$54,$52,$51,$50,$4E,$4D,$4B,$4A,$48,$47,$45,$44,$42,$41,$3F
+    .byte $3E,$3C,$3B,$39,$38,$36,$35,$33,$32,$30,$2F,$2D,$2C,$2A,$29,$27
+    .byte $26,$24,$23,$22,$20,$1F,$1E,$1C,$1B,$1A,$19,$17,$16,$15,$14,$13
+    .byte $12,$11,$10,$0F,$0E,$0D,$0C,$0B,$0A,$09,$08,$08,$07,$06,$06,$05
+    .byte $04,$04,$03,$03,$02,$02,$01,$01,$01,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00,$01,$01,$01,$02,$02,$03,$03,$04
+    .byte $04,$05,$05,$06,$07,$07,$08,$09,$0A,$0B,$0C,$0D,$0D,$0E,$0F,$10
+    .byte $12,$13,$14,$15,$16,$17,$18,$1A,$1B,$1C,$1D,$1F,$20,$21,$23,$24
+    .byte $26,$27,$28,$2A,$2B,$2D,$2E,$30,$31,$33,$34,$36,$37,$39,$3A,$3C
 
 }
