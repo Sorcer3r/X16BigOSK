@@ -85,7 +85,11 @@ characterDataLoop:
     stz messagepointer
     jsr DrawMessage
 
-    // now do things with colours
+    // now do things with colours and movement
+    // colours are cycled by changing the palette
+    // movement is done by using the hardware  scroll registers
+    // so we never need to redraw anything.
+
     // initialise everything for the colour cycling
     lda #$fa
     sta VERAAddrHigh        // point data0 to palette
@@ -96,6 +100,7 @@ characterDataLoop:
     lda #$06
     sta char3Colour
 
+    //initialise things for the movement routines
     stz scrollXIndex    // start sine wave pointer at 0 for X
     lda #$40
     sta scrollYIndex    // and start at 64 (90 degrees out of phase) for Y 
