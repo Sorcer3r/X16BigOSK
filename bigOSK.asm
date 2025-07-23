@@ -10,22 +10,22 @@
 currentCharacter:       .word 0     
 characterDataPointer:   .word 0
 CharacterAddressInRom:  .word 0
-activeRom: .byte 0
+activeRom:              .byte 0
 // 8 bytes of data for each of the characters to be displayed
-character1: .fill 8,0
-character2: .fill 8,0
-character3: .fill 8,0
-
-messagePosition: .byte 0
-messagepointer:  .byte 0
-CharacterColour: .byte 0
-cycleDirection:  .byte 0
-char1Colour:     .byte 0
-char2Colour:     .byte 0
-char3Colour:     .byte 0
-
-scrollXIndex: .byte 0
-scrollYIndex: .byte 0
+character1:             .fill 8,0
+character2:             .fill 8,0
+character3:             .fill 8,0
+messagePosition:        .byte 0
+messagepointer:         .byte 0
+CharacterColour:        .byte 0
+cycleDirection:         .byte 0
+movementCounter1:       .byte 0
+movementCounter2:       .byte 0
+char1Colour:            .byte 0
+char2Colour:            .byte 0
+char3Colour:            .byte 0
+scrollXIndex:           .byte 0
+scrollYIndex:           .byte 0
 
 *=$0801
 	BasicUpstart2(bigOSK)
@@ -102,12 +102,14 @@ characterDataLoop:
 
     //initialise things for the movement routines
     stz scrollXIndex    // start sine wave pointer at 0 for X
+    stz movementCounter1
+    stz movementCounter2
     lda #$40
     sta scrollYIndex    // and start at 64 (90 degrees out of phase) for Y 
                         // this is the same as calculating for cosine but
                         // no need for a second table
 
-colourCycle:
+mainLoop:
     wai         // wait a while
     ldx scrollXIndex        // get index into sine table for X
     lda waveTable,x         // get value from table using index
@@ -116,8 +118,16 @@ colourCycle:
     lda waveTable,x         // get value from table using index
     sta VERA_L1_vscrollLow  // put it into Y scroll reg
     dec scrollXIndex        // dec index pointer for X
+    lda movementCounter2    // get outer movement counter
+    and #4                  // check if we are doing double speed X
+    beq notDoubleX  
+    dec scrollXIndex        // do this for 4 loops out of 8
+notDoubleX:
     dec scrollYIndex        // same for Y
-                            // change these to INC for anticlockwise rotation
+    inc movementCounter1    // bump the inner counter
+    bne continue            // if its back to zero
+    inc movementCounter2    // then bump outer counter
+continue:
     lda #$02
     sta VERAAddrLow     // point to color 1 in palette
     tay                 // and put the #2 in Y while we have it :)
@@ -132,7 +142,7 @@ colourLoop:
                         // lets only update the colours every 4 cycles
     lda scrollXIndex    // use scrollXindex since it increments every cycle
     and #$03            // mask off lower 2 bits
-    bne colourCycle     // if they aren't 0 then do skip updating colours
+    bne mainLoop        // if they aren't 0 then do skip updating colours
     ldx #$02
 updateColours:
     lda char1Colour,x   // increment each of the colour table pointers
@@ -141,7 +151,7 @@ updateColours:
     sta char1Colour,x
     dex                 // repeat for each of the 3 colours we cycle
     bpl updateColours    
-    bra colourCycle     // do it all again, forever!
+    bra mainLoop        // do it all again, forever!
 
 DrawMessage:{
     ldx messagePosition
